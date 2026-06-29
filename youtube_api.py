@@ -141,17 +141,26 @@ def fetch_youtube_mentions(
     api_key: str,
     query: str = KEYWORD,
     max_videos: int = 60,
-    comments_per_video: int = 80,
+    comments_per_video: int = 50,
+    comment_videos: int = 30,
 ) -> pd.DataFrame:
-    """YouTube 영상 + 댓글을 mentions DataFrame으로 수집."""
+    """YouTube 영상 + 댓글을 mentions DataFrame으로 수집.
+
+    댓글은 반응(engagement) 높은 상위 ``comment_videos`` 개 영상에서만 모은다.
+    (클라우드 환경에서 호출량·소요시간을 줄이고 안정적으로 완료하기 위함)
+    """
     video_ids = _search_videos(api_key, query, max_videos)
     videos = _video_details(api_key, video_ids)
 
-    rows: list[dict] = []
-    for v in videos:
-        vid = v.pop("_video_id")
-        rows.append(v)
-        rows += _comments(api_key, vid, v["url"], comments_per_video)
+    # 영상 행 (메타 키 제외)
+    rows: list[dict] = [
+        {k: v for k, v in vd.items() if k != "_video_id"} for vd in videos
+    ]
+
+    # 반응 높은 상위 영상 위주로 댓글 수집
+    top = sorted(videos, key=lambda x: x["engagement"], reverse=True)[:comment_videos]
+    for vd in top:
+        rows += _comments(api_key, vd["_video_id"], vd["url"], comments_per_video)
 
     cols = ["date", "date_known", "channel", "sentiment", "title", "snippet",
             "url", "author", "engagement", "keyword"]
