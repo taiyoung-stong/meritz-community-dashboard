@@ -39,23 +39,33 @@ def _iso(dt: str) -> pd.Timestamp:
 
 
 def _search_videos(api_key: str, query: str, max_videos: int) -> list[str]:
-    """검색어 관련 영상 ID 목록."""
-    ids: list[str] = []
-    page = None
-    while len(ids) < max_videos:
-        params = {
-            "key": api_key, "part": "id", "q": query, "type": "video",
-            "maxResults": 50, "order": "date",
-        }
-        if page:
-            params["pageToken"] = page
-        data = _get("search", params)
-        ids += [it["id"]["videoId"] for it in data.get("items", [])
-                if it.get("id", {}).get("videoId")]
-        page = data.get("nextPageToken")
-        if not page:
-            break
-    return ids[:max_videos]
+    """검색어 관련 영상 ID 목록.
+
+    'relevance'(반응 많은 인기 영상)와 'date'(최신 영상)를 모두 수집해
+    합친다. order=date만 쓰면 갓 올라온 저반응 영상에 치우쳐 인기 영상을
+    놓친다.
+    """
+    seen: list[str] = []
+    for order in ("relevance", "date"):
+        page = None
+        per_order = 0
+        while per_order < max_videos:
+            params = {
+                "key": api_key, "part": "id", "q": query, "type": "video",
+                "maxResults": 50, "order": order,
+            }
+            if page:
+                params["pageToken"] = page
+            data = _get("search", params)
+            for it in data.get("items", []):
+                vid = it.get("id", {}).get("videoId")
+                if vid and vid not in seen:
+                    seen.append(vid)
+            per_order += 50
+            page = data.get("nextPageToken")
+            if not page:
+                break
+    return seen
 
 
 def _video_details(api_key: str, video_ids: list[str]) -> list[dict]:
