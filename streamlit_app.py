@@ -159,9 +159,9 @@ with tab_posts:
         query = st.text_input(
             "🔍 키워드 검색 (제목·본문)", placeholder="예: 정착지원금, 후기, 수수료 …"
         )
-        sort_opts = (["반응 많은순", "최신순", "오래된순"] if HAS_ENGAGEMENT
+        sort_opts = (["최신순", "반응 많은순", "오래된순"] if HAS_ENGAGEMENT
                      else ["최신순", "오래된순"])
-        sort_by = st.selectbox("정렬", sort_opts, index=0)
+        sort_by = st.selectbox("정렬", sort_opts, index=0)  # 기본: 작성일 내림차순
 
     view = df.copy()
     if query:
