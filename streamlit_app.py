@@ -115,9 +115,12 @@ with st.sidebar:
     else:
         st.caption(f"🟢 데이터 출처: **{DATA_SOURCE}**")
 
+# 작성일 미확인(NaT) 글은 기간 필터와 무관하게 항상 포함
+in_range = df_all["date"].isna() | (
+    (df_all["date"].dt.date >= d_start) & (df_all["date"].dt.date <= d_end)
+)
 mask = (
-    (df_all["date"].dt.date >= d_start)
-    & (df_all["date"].dt.date <= d_end)
+    in_range
     & (df_all["channel"].isin(sel_channels))
     & (df_all["sentiment"].isin(sel_sent))
 )
@@ -201,7 +204,7 @@ with tab_posts:
 
     show = view[cols].copy()
     show["sentiment"] = show["sentiment"].map(SENTIMENT_EMOJI)
-    show["date"] = show["date"].dt.strftime("%Y-%m-%d")
+    show["date"] = show["date"].dt.strftime("%Y-%m-%d").fillna("미확인")
     show = show.rename(
         columns={
             "date": "작성일", "channel": "채널", "sentiment": "감성",

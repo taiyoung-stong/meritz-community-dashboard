@@ -67,7 +67,7 @@ def _extract_keyword(text: str) -> str:
     return m.group(1) if m else "기타"
 
 
-def _parse_date(item: dict, channel: str) -> datetime:
+def _parse_date(item: dict, channel: str):
     if channel == "네이버 블로그" and item.get("postdate"):
         return datetime.strptime(item["postdate"], "%Y%m%d")
     if channel == "네이버 뉴스" and item.get("pubDate"):
@@ -75,8 +75,8 @@ def _parse_date(item: dict, channel: str) -> datetime:
             return parsedate_to_datetime(item["pubDate"]).replace(tzinfo=None)
         except Exception:
             pass
-    # 카페 등 날짜 미제공 → 수집일
-    return datetime.combine(date.today(), datetime.min.time())
+    # 카페 등 날짜 미제공 → 가짜 날짜를 만들지 않고 '미확인'(NaT) 처리
+    return pd.NaT
 
 
 def _request(url: str, client_id: str, client_secret: str) -> dict:
