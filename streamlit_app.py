@@ -52,7 +52,7 @@ st.markdown(
 )
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=21600)  # 6시간 캐시 — 첫 1회만 수집, 이후 즉시 로딩
 def get_data() -> tuple[pd.DataFrame, str]:
     df = load_mentions()
     return df, df.attrs.get("source", "샘플 데이터")

@@ -14,6 +14,7 @@ engagement, keyword)에 맞춰 DataFrame을 반환한다.
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import re
 import urllib.parse
@@ -77,6 +78,49 @@ def _parse_date(item: dict, channel: str):
             pass
     # 카페 등 날짜 미제공 → 가짜 날짜를 만들지 않고 '미확인'(NaT) 처리
     return pd.NaT
+
+
+_BLOG_LINK = re.compile(r"blog\.naver\.com/([^/?]+)/(\d+)")
+
+
+def _blog_like_count(link: str) -> int:
+    """블로그 글 1건의 공감수(좋아요)를 네이버 likeit API로 가져온다.
+
+    검색 API엔 없지만, 글마다 이 내부 API를 호출하면 실제 공감수를 얻을 수 있다.
+    실패 시 0.
+    """
+    m = _BLOG_LINK.search(link or "")
+    if not m:
+        return 0
+    bid, log = m.group(1), m.group(2)
+    q = urllib.parse.quote(f"BLOG[{bid}_{log}]")
+    url = f"https://blog.like.naver.com/v1/search/contents?suffix=BLOG&q={q}"
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0",
+                "Referer": f"https://blog.naver.com/{bid}/{log}",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8", "ignore"))
+        reactions = data.get("contents", [{}])[0].get("reactions", [])
+        return sum(int(r.get("count", 0) or 0) for r in reactions)
+    except Exception:
+        return 0
+
+
+def _attach_blog_engagement(df: pd.DataFrame) -> pd.DataFrame:
+    """블로그 행에 공감수를 engagement로 채운다(병렬 호출)."""
+    blog_mask = df["channel"] == "네이버 블로그"
+    links = df.loc[blog_mask, "url"].tolist()
+    if not links:
+        return df
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:
+        counts = list(ex.map(_blog_like_count, links))
+    df.loc[blog_mask, "engagement"] = counts
+    return df
 
 
 def _request(url: str, client_id: str, client_secret: str) -> dict:
@@ -155,4 +199,5 @@ def fetch_naver_mentions(
     df = df[blob.str.contains(rel)]
 
     df = df.drop_duplicates(subset=["url"]).sort_values("date").reset_index(drop=True)
+    df = _attach_blog_engagement(df)  # 블로그 공감수 채우기
     return df
