@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>메리츠 파트너스 · 커뮤니티 반응 대시보드</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+  :root{
+    --bg:#0E1117; --card:#161A23; --border:#232938; --text:#E6E8EB; --muted:#8B93A7;
+    --primary:#FF5C5C; --pos:#3BC97A; --neu:#A8B0BD; --neg:#FF5C5C;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:'Pretendard','Noto Sans KR',sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:inherit}
+  .wrap{display:flex;min-height:100vh}
+  /* 사이드바 */
+  .side{width:280px;flex:0 0 280px;padding:24px 20px;border-right:1px solid var(--border);position:sticky;top:0;height:100vh;overflow:auto}
+  .side h2{font-size:15px;margin:0 0 18px}
+  .side .label{font-size:13px;color:var(--muted);margin:18px 0 8px;font-weight:600}
+  .chk{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px;cursor:pointer}
+  .chk input{accent-color:var(--primary);width:15px;height:15px}
+  .seg{display:flex;gap:6px;flex-wrap:wrap}
+  .seg button{border:1px solid var(--border);background:transparent;color:var(--text);
+    border-radius:999px;padding:5px 14px;font-size:13px;cursor:pointer}
+  .seg button.on{background:rgba(255,92,92,.16);border-color:var(--primary);color:#FF8A85;font-weight:700}
+  .date-row{display:flex;gap:8px}
+  .date-row input{flex:1;background:var(--card);border:1px solid var(--border);color:var(--text);
+    border-radius:8px;padding:7px 8px;font-size:13px}
+  .src{margin-top:22px;font-size:12px;color:var(--muted);line-height:1.6;border-top:1px solid var(--border);padding-top:14px}
+  /* 메인 */
+  .main{flex:1;padding:28px 34px;max-width:1280px}
+  h1{font-size:30px;margin:0 0 6px;font-weight:800}
+  .badge{display:inline-block;background:rgba(255,92,92,.16);color:#FF8A85;font-weight:700;
+    font-size:14px;padding:3px 13px;border-radius:999px;vertical-align:middle;margin-left:8px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 18px}
+  .tabs{display:flex;gap:8px;border-bottom:1px solid var(--border);margin-bottom:22px}
+  .tabs button{background:none;border:none;color:var(--muted);font-size:15px;font-weight:600;
+    padding:10px 16px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tabs button.on{color:var(--text);border-bottom-color:var(--primary)}
+  .kpis{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+  .kpi{flex:1;min-width:150px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px}
+  .kpi .k{font-size:13px;color:var(--muted)}
+  .kpi .v{font-size:30px;font-weight:800;margin-top:4px}
+  .kpi .d{font-size:12px;margin-top:4px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:16px}
+  .card h3{font-size:15px;margin:0 0 4px}
+  .card .note{font-size:12px;color:var(--muted);margin:0 0 8px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .chart{width:100%;height:320px}
+  .controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .controls input[type=text],.controls select{background:var(--card);border:1px solid var(--border);
+    color:var(--text);border-radius:8px;padding:9px 12px;font-size:14px}
+  .controls input[type=text]{flex:1;min-width:240px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--card)}
+  td.title{max-width:460px}
+  .tbl-wrap{max-height:620px;overflow:auto;border:1px solid var(--border);border-radius:12px}
+  .pill{font-size:12px;padding:2px 8px;border-radius:999px;white-space:nowrap}
+  .pos{background:rgba(59,201,122,.16);color:#5fe39a}
+  .neu{background:rgba(168,176,189,.16);color:#c2c8d2}
+  .neg{background:rgba(255,92,92,.16);color:#ff8a85}
+  .muted{color:var(--muted)}
+  @media(max-width:880px){.wrap{flex-direction:column}.side{width:auto;height:auto;position:static;border-right:none;border-bottom:1px solid var(--border)}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <aside class="side">
+    <h2>🔎 필터</h2>
+    <div class="label">기간</div>
+    <div class="date-row">
+      <input type="date" id="dFrom"><input type="date" id="dTo">
+    </div>
+    <div class="label">채널</div>
+    <div id="chList"></div>
+    <div class="label">감성</div>
+    <div class="seg" id="sentSeg">
+      <button data-s="긍정" class="on">긍정</button>
+      <button data-s="중립" class="on">중립</button>
+      <button data-s="부정" class="on">부정</button>
+    </div>
+    <div class="src" id="srcBox"></div>
+  </aside>
+
+  <main class="main">
+    <h1>커뮤니티 반응 대시보드 <span class="badge" id="kw">메리츠 파트너스</span></h1>
+    <p class="sub" id="sub"></p>
+
+    <div class="tabs">
+      <button id="tabPosts" class="on">📰 게시글 탐색</button>
+      <button id="tabInsight">📊 인사이트 분석</button>
+    </div>
+
+    <!-- 게시글 탐색 -->
+    <section id="viewPosts">
+      <div class="controls">
+        <input type="text" id="q" placeholder="🔍 키워드 검색 (제목·본문·연관어)">
+        <select id="sort">
+          <option value="recent">최신순</option>
+          <option value="eng">반응 많은순</option>
+          <option value="old">오래된순</option>
+        </select>
+      </div>
+      <div class="kpis" id="postKpis"></div>
+      <p class="note muted" id="postCount"></p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>작성일</th><th>채널</th><th>감성</th><th>제목</th>
+            <th>연관 키워드</th><th>반응수</th><th>링크</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 인사이트 분석 -->
+    <section id="viewInsight" style="display:none">
+      <div class="kpis" id="insKpis"></div>
+      <div class="card"><h3>📈 언급량 추이 (채널별)</h3>
+        <p class="note" id="trendNote"></p><div class="chart" id="cTrend"></div></div>
+      <div class="grid2">
+        <div class="card"><h3>📡 채널별 분포</h3><div class="chart" id="cChannel"></div></div>
+        <div class="card"><h3>💬 감성 분포</h3><div class="chart" id="cSent"></div></div>
+      </div>
+      <div class="card"><h3>🗓️ 주별 감성 추이</h3><div class="chart" id="cWeekly"></div></div>
+      <div class="grid2">
+        <div class="card"><h3>🏷️ 연관 키워드 Top 10</h3><div class="chart" id="cKw"></div></div>
+        <div class="card"><h3>🔥 채널별 반응량 (engagement)</h3><div class="chart" id="cEng"></div></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const PALETTE=['#7FD1B9','#FF9F7F','#9AA7FF','#F4A23F','#B6E36B','#F2D14E','#D9A8E0','#7FC8F8'];
+const SENT_COLOR={'긍정':'#3BC97A','중립':'#A8B0BD','부정':'#FF5C5C'};
+const SENT_CLASS={'긍정':'pos','중립':'neu','부정':'neg'};
+const fmt=n=>n.toLocaleString('ko-KR');
+let DATA=null, charts={};
+
+const state={channels:new Set(),sents:new Set(['긍정','중립','부정']),from:null,to:null,
+  tab:'posts',q:'',sort:'recent'};
+
+function baseChart(el){const c=echarts.init(el,null,{renderer:'canvas'});charts[el.id]=c;return c;}
+const axisStyle={axisLine:{lineStyle:{color:'#2A3142'}},axisLabel:{color:'#8B93A7'},
+  splitLine:{lineStyle:{color:'rgba(255,255,255,.06)'}}};
+
+async function init(){
+  DATA=await (await fetch('data.json?_='+Date.now())).json();
+  document.getElementById('kw').textContent=DATA.keyword;
+  // 채널 목록
+  const chans=[...new Set(DATA.mentions.map(m=>m.channel))].sort();
+  chans.forEach(c=>state.channels.add(c));
+  const chBox=document.getElementById('chList');
+  chBox.innerHTML=chans.map(c=>`<label class="chk"><input type="checkbox" checked data-ch="${c}">${c}</label>`).join('');
+  chBox.querySelectorAll('input').forEach(i=>i.onchange=()=>{
+    i.checked?state.channels.add(i.dataset.ch):state.channels.delete(i.dataset.ch);render();});
+  // 감성 토글
+  document.querySelectorAll('#sentSeg button').forEach(b=>b.onclick=()=>{
+    b.classList.toggle('on');
+    b.classList.contains('on')?state.sents.add(b.dataset.s):state.sents.delete(b.dataset.s);render();});
+  // 기간
+  const dated=DATA.mentions.filter(m=>m.date).map(m=>m.date).sort();
+  state.from=dated[0]; state.to=dated[dated.length-1];
+  const df=document.getElementById('dFrom'),dt=document.getElementById('dTo');
+  df.value=state.from; dt.value=state.to;
+  df.onchange=()=>{state.from=df.value;render();};
+  dt.onchange=()=>{state.to=dt.value;render();};
+  // 탭
+  document.getElementById('tabPosts').onclick=()=>switchTab('posts');
+  document.getElementById('tabInsight').onclick=()=>switchTab('insight');
+  document.getElementById('q').oninput=e=>{state.q=e.target.value;renderPosts();};
+  document.getElementById('sort').onchange=e=>{state.sort=e.target.value;renderPosts();};
+  // 출처
+  const gen=DATA.generated_at.replace('T',' ').replace('Z',' UTC');
+  document.getElementById('srcBox').innerHTML=
+    `🟢 데이터 출처<br><b>실데이터 · ${DATA.source}</b><br>(감성 추정)<br><br>최종 수집 ${gen}`;
+  window.addEventListener('resize',()=>Object.values(charts).forEach(c=>c.resize()));
+  render();
+}
+
+function switchTab(t){
+  state.tab=t;
+  document.getElementById('tabPosts').classList.toggle('on',t==='posts');
+  document.getElementById('tabInsight').classList.toggle('on',t==='insight');
+  document.getElementById('viewPosts').style.display=t==='posts'?'':'none';
+  document.getElementById('viewInsight').style.display=t==='insight'?'':'none';
+  render();
+}
+
+function filtered(){
+  return DATA.mentions.filter(m=>{
+    if(!state.channels.has(m.channel))return false;
+    if(!state.sents.has(m.sentiment))return false;
+    if(m.date){ if(state.from&&m.date<state.from)return false; if(state.to&&m.date>state.to)return false; }
+    return true; // 날짜 미확인은 항상 포함
+  });
+}
+
+function render(){
+  const sub=document.getElementById('sub');
+  sub.textContent=`수집 기간 ${state.from} ~ ${state.to} · 채널 ${state.channels.size}개 · 키워드 ${DATA.keyword}`;
+  if(state.tab==='posts')renderPosts(); else renderInsight();
+}
+
+function renderPosts(){
+  let rows=filtered();
+  const q=state.q.trim();
+  if(q)rows=rows.filter(m=>(m.title+' '+m.snippet+' '+m.keyword).toLowerCase().includes(q.toLowerCase()));
+  rows=rows.slice().sort((a,b)=>{
+    if(state.sort==='eng')return b.engagement-a.engagement;
+    const ad=a.date||'', bd=b.date||'';
+    if(state.sort==='old')return ad<bd?-1:ad>bd?1:0;
+    // recent: 날짜 내림차순, 미확인(빈값)은 뒤로
+    if(!ad&&!bd)return 0; if(!ad)return 1; if(!bd)return -1;
+    return bd<ad?-1:bd>ad?1:0;
+  });
+  // KPI
+  const pos=rows.filter(m=>m.sentiment==='긍정').length;
+  const totEng=rows.reduce((s,m)=>s+m.engagement,0);
+  document.getElementById('postKpis').innerHTML=
+    kpi('검색 결과',fmt(rows.length)+'건')+
+    kpi('총 반응수',fmt(totEng))+
+    kpi('긍정 비율',rows.length?(pos/rows.length*100).toFixed(1)+'%':'—');
+  document.getElementById('postCount').textContent=
+    `전체 ${fmt(filtered().length)}건 중 ${fmt(rows.length)}건 표시 · 상위 300건만 렌더`;
+  const show=rows.slice(0,300);
+  document.getElementById('tbody').innerHTML=show.map(m=>`<tr>
+    <td class="muted">${m.date||'<span class="muted">미확인</span>'}</td>
+    <td>${m.channel}</td>
+    <td><span class="pill ${SENT_CLASS[m.sentiment]}">${m.sentiment}</span></td>
+    <td class="title">${esc(m.title)}</td>
+    <td class="muted">${m.keyword}</td>
+    <td>${fmt(m.engagement)}</td>
+    <td><a href="${m.url}" target="_blank" rel="noopener" style="color:#FF8A85">원문</a></td>
+  </tr>`).join('');
+}
+
+function renderInsight(){
+  const rows=filtered();
+  const dated=rows.filter(m=>m.date);
+  // KPI
+  const total=rows.length;
+  const pos=rows.filter(m=>m.sentiment==='긍정').length;
+  const neg=rows.filter(m=>m.sentiment==='부정').length;
+  const days=new Set(dated.map(m=>m.date)).size||1;
+  document.getElementById('insKpis').innerHTML=
+    kpi('총 언급량',fmt(total)+'건')+
+    kpi('긍정 비율',total?(pos/total*100).toFixed(1)+'%':'—',`부정 ${total?(neg/total*100).toFixed(1):0}%`)+
+    kpi('활성 채널',state.channels.size+'개')+
+    kpi('일평균 언급',(dated.length/days).toFixed(1)+'건');
+  const undated=total-dated.length;
+  document.getElementById('trendNote').textContent= undated?
+    `※ 작성일 확인 ${fmt(dated.length)}건 기준. 카페 등 미확인 ${fmt(undated)}건은 추이 제외(분포·감성·목록엔 포함).`:'';
+  drawTrend(dated); drawChannel(rows); drawSent(rows); drawWeekly(dated); drawKw(rows); drawEng(rows);
+}
+
+function kpi(k,v,d){return `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div>${d?`<div class="d muted">${d}</div>`:''}</div>`;}
+function esc(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function groupCount(arr,key){const m={};arr.forEach(x=>{const k=key(x);m[k]=(m[k]||0)+1;});return m;}
+
+function drawTrend(rows){
+  const c=charts.cTrend||baseChart(document.getElementById('cTrend'));
+  const dates=[...new Set(rows.map(m=>m.date))].sort();
+  const chans=[...new Set(rows.map(m=>m.channel))].sort();
+  const series=chans.map((ch,i)=>({name:ch,type:'line',stack:'t',areaStyle:{opacity:.55},
+    showSymbol:false,lineStyle:{width:.5},itemStyle:{color:PALETTE[i%PALETTE.length]},
+    data:dates.map(d=>rows.filter(m=>m.date===d&&m.channel===ch).length)}));
+  c.setOption({backgroundColor:'',tooltip:{trigger:'axis'},legend:{textStyle:{color:'#8B93A7'},bottom:0,type:'scroll'},
+    grid:{left:42,right:16,top:16,bottom:50},
+    xAxis:{type:'category',data:dates,...axisStyle},yAxis:{type:'value',...axisStyle},series});
+}
+function drawChannel(rows){
+  const c=charts.cChannel||baseChart(document.getElementById('cChannel'));
+  const g=groupCount(rows,m=>m.channel);
+  const data=Object.entries(g).map(([n,v],i)=>({name:n,value:v,itemStyle:{color:PALETTE[i%PALETTE.length]}}));
+  c.setOption({backgroundColor:'',tooltip:{trigger:'item',formatter:'{b}<br>{c}건 ({d}%)'},
+    legend:{textStyle:{color:'#8B93A7'},bottom:0,type:'scroll'},
+    series:[{type:'pie',radius:['45%','70%'],center:['50%','45%'],label:{color:'#E6E8EB'},data}]});
+}
+function drawSent(rows){
+  const c=charts.cSent||baseChart(document.getElementById('cSent'));
+  const order=['긍정','중립','부정'];const g=groupCount(rows,m=>m.sentiment);
+  const data=order.filter(s=>g[s]).map(s=>({name:s,value:g[s],itemStyle:{color:SENT_COLOR[s]}}));
+  c.setOption({backgroundColor:'',tooltip:{trigger:'item',formatter:'{b}<br>{c}건 ({d}%)'},
+    legend:{textStyle:{color:'#8B93A7'},bottom:0},
+    series:[{type:'pie',radius:['45%','70%'],center:['50%','45%'],label:{color:'#E6E8EB'},data}]});
+}
+function weekStart(ds){const d=new Date(ds+'T00:00:00');const day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);return d.toISOString().slice(0,10);}
+function drawWeekly(rows){
+  const c=charts.cWeekly||baseChart(document.getElementById('cWeekly'));
+  const weeks=[...new Set(rows.map(m=>weekStart(m.date)))].sort();
+  const order=['긍정','중립','부정'];
+  const series=order.map(s=>({name:s,type:'bar',stack:'w',itemStyle:{color:SENT_COLOR[s]},
+    data:weeks.map(w=>rows.filter(m=>weekStart(m.date)===w&&m.sentiment===s).length)}));
+  c.setOption({backgroundColor:'',tooltip:{trigger:'axis'},legend:{textStyle:{color:'#8B93A7'},bottom:0},
+    grid:{left:42,right:16,top:16,bottom:44},
+    xAxis:{type:'category',data:weeks,...axisStyle},yAxis:{type:'value',...axisStyle},series});
+}
+function drawKw(rows){
+  const c=charts.cKw||baseChart(document.getElementById('cKw'));
+  const g=groupCount(rows.filter(m=>m.keyword&&m.keyword!=='기타'),m=>m.keyword);
+  const top=Object.entries(g).sort((a,b)=>a[1]-b[1]).slice(-10);
+  c.setOption({backgroundColor:'',tooltip:{trigger:'axis'},grid:{left:80,right:24,top:10,bottom:24},
+    xAxis:{type:'value',...axisStyle},yAxis:{type:'category',data:top.map(x=>x[0]),...axisStyle},
+    series:[{type:'bar',itemStyle:{color:'#FF5C5C'},data:top.map(x=>x[1])}]});
+}
+function drawEng(rows){
+  const c=charts.cEng||baseChart(document.getElementById('cEng'));
+  const m={};rows.forEach(r=>m[r.channel]=(m[r.channel]||0)+r.engagement);
+  const top=Object.entries(m).sort((a,b)=>a[1]-b[1]);
+  c.setOption({backgroundColor:'',tooltip:{trigger:'axis'},grid:{left:90,right:24,top:10,bottom:24},
+    xAxis:{type:'value',...axisStyle},yAxis:{type:'category',data:top.map(x=>x[0]),...axisStyle},
+    series:[{type:'bar',itemStyle:{color:'#F4A23F'},data:top.map(x=>x[1])}]});
+}
+
+init();
+</script>
+</body>
+</html>
