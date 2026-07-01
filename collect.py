@@ -143,6 +143,15 @@ def main() -> int:
         json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
 
     print(f"[ok] {len(records):,}건 → {OUT_PATH}  ({payload['source']})")
+
+    # 주간 리포트 갱신 (완료된 주 자동 기록)
+    try:
+        from weekly import update_weekly_reports
+        n = update_weekly_reports(records)
+        print(f"[weekly] 주간 리포트 {n}개 추가")
+    except Exception as exc:
+        print(f"[weekly] 리포트 생성 실패: {exc}", file=sys.stderr)
+
     return 0
 
 

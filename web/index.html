@@ -79,6 +79,18 @@
   .metric-chip b{font-size:15px;display:block}
   .ppl-del{background:none;border:1px solid var(--border);color:var(--muted);
     border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer}
+  details.rep{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden}
+  details.rep>summary{cursor:pointer;list-style:none;padding:14px 18px;display:flex;
+    align-items:center;gap:12px;font-weight:700;font-size:15px}
+  details.rep>summary::-webkit-details-marker{display:none}
+  details.rep>summary::before{content:"▸";color:var(--primary);font-size:12px}
+  details.rep[open]>summary::before{content:"▾"}
+  details.rep>summary .rmeta{margin-left:auto;font-weight:500;font-size:12.5px;color:var(--muted)}
+  .rep-body{padding:4px 18px 16px;border-top:1px solid var(--border)}
+  .rep-body .sumtext{font-size:13.5px;color:var(--text);margin:12px 0}
+  .rep-row{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+  .rep-post{font-size:12.5px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  .wow-up{color:#3BC97A}.wow-dn{color:#FF7A7A}
   @media(max-width:880px){.wrap{flex-direction:column}.side{width:auto;height:auto;position:static;border-right:none;border-bottom:1px solid var(--border)}.grid2{grid-template-columns:1fr}}
 </style>
 </head>
@@ -116,6 +128,7 @@
       <button id="tabPosts" class="on">📰 게시글 탐색</button>
       <button id="tabInsight">📊 인사이트 분석</button>
       <button id="tabPpl">🎬 PPL 분석</button>
+      <button id="tabReport">📅 주간 리포트</button>
     </div>
 
     <!-- 게시글 탐색 -->
@@ -171,6 +184,15 @@
       <div class="kpis" id="pplKpis"></div>
       <div id="pplList"></div>
     </section>
+
+    <!-- 주간 리포트 -->
+    <section id="viewReport" style="display:none">
+      <div class="card">
+        <h3>📅 주간 리포트</h3>
+        <p class="note">매주 지난주(월~일) 요약이 자동 기록됩니다. 제목을 누르면 상세가 펼쳐집니다.</p>
+      </div>
+      <div id="reportList"></div>
+    </section>
   </main>
 </div>
 
@@ -179,7 +201,7 @@ const PALETTE=['#7FD1B9','#FF9F7F','#9AA7FF','#F4A23F','#B6E36B','#F2D14E','#D9A
 const SENT_COLOR={'긍정':'#3BC97A','중립':'#A8B0BD','부정':'#FF5C5C'};
 const SENT_CLASS={'긍정':'pos','중립':'neu','부정':'neg'};
 const fmt=n=>n.toLocaleString('ko-KR');
-let DATA=null, charts={}, EVENTS=[], MAXDATE=null;
+let DATA=null, charts={}, EVENTS=[], MAXDATE=null, REPORTS=[];
 
 const state={channels:new Set(),sents:new Set(['긍정','중립','부정']),from:null,to:null,
   tab:'posts',q:'',sort:'recent'};
@@ -224,6 +246,8 @@ async function init(){
   document.getElementById('tabPosts').onclick=()=>switchTab('posts');
   document.getElementById('tabInsight').onclick=()=>switchTab('insight');
   document.getElementById('tabPpl').onclick=()=>switchTab('ppl');
+  document.getElementById('tabReport').onclick=()=>switchTab('report');
+  try{ REPORTS=await (await fetch('reports.json?_='+Date.now())).json(); }catch(e){ REPORTS=[]; }
   document.getElementById('pplAdd').onclick=addPpl;
   document.getElementById('pplUrl').addEventListener('keydown',e=>{if(e.key==='Enter')addPpl();});
   document.getElementById('q').oninput=e=>{state.q=e.target.value;renderPosts();};
@@ -238,12 +262,12 @@ async function init(){
 
 function switchTab(t){
   state.tab=t;
-  for(const [b,v] of [['tabPosts','viewPosts'],['tabInsight','viewInsight'],['tabPpl','viewPpl']]){
+  for(const [b,v] of [['tabPosts','viewPosts'],['tabInsight','viewInsight'],['tabPpl','viewPpl'],['tabReport','viewReport']]){
     const on=(t===b.replace('tab','').toLowerCase());
     document.getElementById(b).classList.toggle('on',on);
     document.getElementById(v).style.display=on?'':'none';
   }
-  if(t==='ppl') renderPpl(); else render();
+  if(t==='ppl') renderPpl(); else if(t==='report') renderReport(); else render();
 }
 
 function filtered(){
@@ -434,6 +458,34 @@ function renderPpl(){
       </div>
       <button class="ppl-del" onclick="delPpl('${m.url.replace(/'/g,"\\'")}')">삭제</button>
     </div>`).join('');
+}
+
+// ===== 주간 리포트 =====
+function renderReport(){
+  const wrap=document.getElementById('reportList');
+  if(!REPORTS.length){ wrap.innerHTML='<p class="note muted">아직 기록된 리포트가 없습니다. 한 주가 지나면 매주 월요일에 자동 생성됩니다.</p>'; return; }
+  wrap.innerHTML=REPORTS.map((r,i)=>{
+    const wow = (r.wow==null)?'' : `<span class="${r.wow>=0?'wow-up':'wow-dn'}">전주비 ${r.wow>=0?'▲':'▼'} ${Math.abs(r.wow)}%</span>`;
+    const s=r.sentiment||{};
+    const chips=(r.channels||[]).map(([k,v])=>`<span class="metric-chip">${k}<b>${fmt(v)}</b></span>`).join('')||'<span class="muted">-</span>';
+    const kws=(r.keywords||[]).map(([k,v])=>`<span class="metric-chip">${k}<b>${fmt(v)}</b></span>`).join('')||'<span class="muted">-</span>';
+    const posts=(r.top_posts||[]).map(p=>`<div class="rep-post"><span class="pill ${SENT_CLASS[p.sentiment]||'neu'}">${p.sentiment}</span> ${esc(p.title)} <span class="muted">· ${p.platform} · 반응 ${fmt(p.engagement)}</span> · <a href="${p.url}" target="_blank" rel="noopener" style="color:#FF8A85">원문</a></div>`).join('')||'<span class="muted">-</span>';
+    return `<details class="rep" ${i===0?'open':''}>
+      <summary>${r.week}<span class="rmeta">언급 ${fmt(r.total)}건 &nbsp;${wow}</span></summary>
+      <div class="rep-body">
+        <div class="sumtext">${esc(r.summary||'')} <span class="muted">(${r.start} ~ ${r.end})</span></div>
+        <b style="font-size:13px">감성</b>
+        <div class="rep-row">
+          <span class="metric-chip">🟢 긍정<b>${s['긍정']||0}</b></span>
+          <span class="metric-chip">⚪ 중립<b>${s['중립']||0}</b></span>
+          <span class="metric-chip">🔴 부정<b>${s['부정']||0}</b></span>
+        </div>
+        <b style="font-size:13px">채널</b><div class="rep-row">${chips}</div>
+        <b style="font-size:13px">연관 키워드</b><div class="rep-row">${kws}</div>
+        <b style="font-size:13px">인기 게시글</b><div style="margin-top:6px">${posts}</div>
+      </div>
+    </details>`;
+  }).join('');
 }
 
 init();
