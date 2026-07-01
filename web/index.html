@@ -79,13 +79,6 @@
   .metric-chip b{font-size:15px;display:block}
   .ppl-del{background:none;border:1px solid var(--border);color:var(--muted);
     border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer}
-  .cmt-toggle{background:none;border:1px solid var(--border);color:var(--muted);
-    border-radius:8px;padding:4px 12px;font-size:12px;cursor:pointer;margin-top:10px}
-  .cmt-toggle:hover{color:var(--text);border-color:var(--primary)}
-  .ppl-comments{margin-top:10px;border-top:1px solid var(--border);padding-top:6px}
-  .cmt{font-size:12.5px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);line-height:1.5}
-  .cmt .who{color:var(--muted);font-weight:600;margin-right:6px}
-  .cmt .lk{color:#F4A23F;font-size:11px;margin-left:6px}
   @media(max-width:880px){.wrap{flex-direction:column}.side{width:auto;height:auto;position:static;border-right:none;border-bottom:1px solid var(--border)}.grid2{grid-template-columns:1fr}}
 </style>
 </head>
@@ -411,25 +404,6 @@ async function addPpl(){
 
 function delPpl(url){ savePpl(loadPpl().filter(x=>x.url!==url)); renderPpl(); }
 
-async function toggleCmt(btn, url){
-  const box=btn.nextElementSibling;
-  if(box.style.display!=='none'){ box.style.display='none'; return; }
-  const items=loadPpl(); const it=items.find(x=>x.url===url);
-  if(it && it.comments===undefined){   // 예전 항목: 댓글 아직 안 받음 → 지금 가져오기
-    btn.textContent='💬 불러오는 중…';
-    try{
-      const d=await (await fetch('/api/analyze?url='+encodeURIComponent(url))).json();
-      it.comments=d.comments||[]; savePpl(items);
-    }catch(e){ it.comments=[]; }
-    btn.textContent='💬 댓글 보기';
-  }
-  const cs=(it&&it.comments)||[];
-  box.innerHTML = cs.length
-    ? cs.map(c=>`<div class="cmt"><span class="who">${esc(c.author||'익명')}</span>${esc(c.text||'')}${c.likes?`<span class="lk">👍${fmt(c.likes)}</span>`:''}</div>`).join('')
-    : '<p class="note muted">표시할 댓글이 없습니다. (네이버 블로그는 댓글 API 미지원)</p>';
-  box.style.display='';
-}
-
 function renderPpl(){
   const items=loadPpl();
   const wrap=document.getElementById('pplList');
@@ -457,8 +431,6 @@ function renderPpl(){
         <div class="ppl-metrics">
           ${Object.entries(m.metrics||{}).map(([k,v])=>`<span class="metric-chip">${k}<b>${fmt(v)}</b></span>`).join('')}
         </div>
-        <button class="cmt-toggle" onclick="toggleCmt(this,'${m.url.replace(/'/g,"\\'")}')">💬 댓글 보기${m.metrics&&m.metrics['댓글']!=null?' ('+fmt(m.metrics['댓글'])+')':''}</button>
-        <div class="ppl-comments" style="display:none"></div>
       </div>
       <button class="ppl-del" onclick="delPpl('${m.url.replace(/'/g,"\\'")}')">삭제</button>
     </div>`).join('');

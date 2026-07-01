@@ -69,23 +69,6 @@ def _sentiment(text):
     return "부정" if n > p else "긍정" if p > n else "중립"
 
 
-def _yt_comments(vid, key, limit=20):
-    try:
-        u = "https://www.googleapis.com/youtube/v3/commentThreads?" + urllib.parse.urlencode(
-            {"key": key, "part": "snippet", "videoId": vid, "maxResults": limit,
-             "order": "relevance", "textFormat": "plainText"})
-        d = json.loads(_get(u))
-        out = []
-        for it in d.get("items", []):
-            s = it["snippet"]["topLevelComment"]["snippet"]
-            out.append({"author": _clean(s.get("authorDisplayName", "")),
-                        "text": _clean(s.get("textDisplay", "")),
-                        "likes": int(s.get("likeCount", 0) or 0)})
-        return out
-    except Exception:
-        return []  # 댓글 사용중지 등
-
-
 def _youtube(vid):
     key = os.environ.get("YOUTUBE_API_KEY", "")
     u = "https://www.googleapis.com/youtube/v3/videos?" + urllib.parse.urlencode(
@@ -104,7 +87,6 @@ def _youtube(vid):
         "engagement": likes + cmts, "engagement_label": "좋아요+댓글",
         "metrics": {"조회수": views, "좋아요": likes, "댓글": cmts},
         "sentiment": _sentiment(title + " " + _clean(sn.get("description", ""))),
-        "comments": _yt_comments(vid, key),
     }
 
 
@@ -134,7 +116,6 @@ def _blog(bid, log):
         "platform": "네이버 블로그", "title": title, "date": date, "author": bid,
         "engagement": likes, "engagement_label": "공감수",
         "metrics": {"공감": likes}, "sentiment": _sentiment(title),
-        "comments": [],  # 네이버 블로그 댓글 API 미지원
     }
 
 
@@ -147,31 +128,24 @@ def _cafe(name, art):
             clubid = m.group(1)
     except Exception:
         pass
-    title, date, cmts, reads, comments = f"카페 {name}", None, 0, 0, []
+    title, date, cmts, reads = f"카페 {name}", None, 0, 0
     if clubid:
         try:
             r = _get(f"https://apis.naver.com/cafe-web/cafe-articleapi/v2.1/cafes/{clubid}/articles/{art}",
                      ref=f"https://cafe.naver.com/{name}/{art}")
-            res = json.loads(r).get("result", {})
-            a = res.get("article", {})
+            a = json.loads(r).get("result", {}).get("article", {})
             title = _clean(a.get("subject") or a.get("title") or title)
             cmts = int(a.get("commentCount", 0) or 0)
             reads = int(a.get("readCount", 0) or 0)
             ts = a.get("writeDate")
             if ts:
                 date = datetime.datetime.fromtimestamp(ts / 1000).strftime("%Y-%m-%d")
-            for c in (res.get("comments", {}) or {}).get("items", [])[:20]:
-                comments.append({
-                    "author": _clean((c.get("writer") or {}).get("nick") or c.get("writerNick") or ""),
-                    "text": _clean(c.get("content") or ""),
-                    "likes": int(c.get("likeCount", 0) or 0)})
         except Exception:
             pass
     return {
         "platform": "네이버 카페", "title": title, "date": date, "author": name,
         "engagement": cmts, "engagement_label": "댓글수",
         "metrics": {"댓글": cmts, "조회수": reads}, "sentiment": _sentiment(title),
-        "comments": comments,
     }
 
 
