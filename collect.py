@@ -52,11 +52,14 @@ def _apply_llm_sentiment(df: pd.DataFrame) -> pd.DataFrame:
     if not todo.empty:
         texts = (todo["title"].fillna("") + " " + todo["snippet"].fillna("")).tolist()
         labels = classify(texts)
+        done = 0
         for url, lab in zip(todo["url"].tolist(), labels):
-            cache[url] = lab
-        print(f"[sentiment_llm] 신규 {len(todo)}건 분류 (캐시 총 {len(cache)})")
+            if lab:  # 실패(None)는 캐시하지 않고 다음 실행에서 재시도
+                cache[url] = lab
+                done += 1
+        print(f"[sentiment] 신규 {len(todo)}건 중 {done}건 분류 (캐시 총 {len(cache)})")
     else:
-        print("[sentiment_llm] 신규 없음 (전부 캐시)")
+        print("[sentiment] 신규 없음 (전부 캐시)")
 
     df["sentiment"] = df["url"].map(cache).fillna(df["sentiment"])
     # 캐시에서 현재 URL만 유지(무한 증식 방지)

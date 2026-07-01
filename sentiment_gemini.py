@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 import urllib.error
 import urllib.request
 
 MODEL = "gemini-2.5-flash"
-CHUNK = 40
-GAP_SEC = 4.0  # 무료 등급 RPM 대비 호출 간격
+CHUNK = 90          # 호출 수 최소화(무료 RPM 대비)
+GAP_SEC = 7.0       # 호출 간격 ≤ ~8.5 RPM (무료 10 RPM 이하)
 LABELS = {"긍정", "중립", "부정"}
 
 SYSTEM = (
@@ -58,12 +59,20 @@ def _call(key: str, texts: list[str]) -> list[str]:
     return ["중립"] * len(texts)
 
 
-def classify(texts: list[str]) -> list[str]:
-    """텍스트 리스트 → 감성 라벨 리스트(같은 순서). GEMINI_API_KEY 필요."""
+def classify(texts: list[str]) -> list:
+    """텍스트 → 감성 라벨 리스트(같은 순서). 실패 청크는 None(다음 실행 재시도).
+
+    무료 등급 한도로 일부 청크가 실패해도 성공분은 유지되고 작업은 중단되지 않는다.
+    """
     key = os.environ["GEMINI_API_KEY"]
-    out: list[str] = []
+    out: list = []
     for i in range(0, len(texts), CHUNK):
         if i:
             time.sleep(GAP_SEC)
-        out += _call(key, texts[i : i + CHUNK])
+        chunk = texts[i : i + CHUNK]
+        try:
+            out += _call(key, chunk)
+        except Exception as e:
+            print(f"[gemini] 청크 실패(스킵, 다음 실행 재시도): {e}", file=sys.stderr)
+            out += [None] * len(chunk)
     return out
