@@ -123,6 +123,80 @@ def _attach_blog_engagement(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+_CAFE_LINK = re.compile(r"cafe\.naver\.com/([^/?]+)/(\d+)")
+_CLUBID_RE = re.compile(r"club(?:id|Id)[\"'=: ]+(\d+)")
+_clubid_cache: dict[str, str | None] = {}
+
+
+def _web_get(url: str, ref: str | None = None, limit: int | None = None) -> str:
+    h = {"User-Agent": "Mozilla/5.0", "Referer": ref or "https://cafe.naver.com"}
+    with urllib.request.urlopen(urllib.request.Request(url, headers=h), timeout=10) as resp:
+        raw = resp.read(limit) if limit else resp.read()
+    return raw.decode("utf-8", "ignore")
+
+
+def _cafe_clubid(urlname: str) -> str | None:
+    """카페 URL 이름 → 숫자 clubId (홈 HTML 앞부분에서 추출, 캐시)."""
+    if urlname in _clubid_cache:
+        return _clubid_cache[urlname]
+    cid = None
+    try:
+        html = _web_get(f"https://cafe.naver.com/{urlname}", limit=90000)
+        m = _CLUBID_RE.search(html) or re.search(r'"cafeId":(\d+)', html)
+        if m:
+            cid = m.group(1)
+    except Exception:
+        pass
+    _clubid_cache[urlname] = cid
+    return cid
+
+
+def _cafe_meta(link: str) -> tuple[int, str | None]:
+    """카페 글 1건의 (댓글수, 작성일). 회원전용·삭제글 등은 (0, None).
+
+    검색 API엔 없지만 cafe-articleapi로 공개글의 commentCount·writeDate를 얻는다.
+    """
+    m = _CAFE_LINK.search(link or "")
+    if not m:
+        return (0, None)
+    urlname, art = m.group(1), m.group(2)
+    cid = _cafe_clubid(urlname)
+    if not cid:
+        return (0, None)
+    try:
+        r = _web_get(
+            f"https://apis.naver.com/cafe-web/cafe-articleapi/v2.1/cafes/{cid}/articles/{art}",
+            ref=f"https://cafe.naver.com/{urlname}/{art}",
+        )
+        a = json.loads(r).get("result", {}).get("article", {})
+        eng = int(a.get("commentCount", 0) or 0)
+        ts = a.get("writeDate")
+        d = datetime.fromtimestamp(ts / 1000).strftime("%Y-%m-%d") if ts else None
+        return (eng, d)
+    except Exception:
+        return (0, None)
+
+
+def _attach_cafe_meta(df: pd.DataFrame) -> pd.DataFrame:
+    """카페 행에 댓글수(engagement)와 작성일(date/date_known)을 채운다."""
+    mask = df["channel"] == "네이버 카페"
+    idx = list(df.index[mask])
+    if not idx:
+        return df
+    links = df.loc[idx, "url"].tolist()
+    # 중복 카페 clubId 선해석(홈 HTML 중복 요청 방지)
+    for un in {m.group(1) for l in links if (m := _CAFE_LINK.search(l))}:
+        _cafe_clubid(un)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:
+        res = list(ex.map(_cafe_meta, links))
+    for i, (eng, d) in zip(idx, res):
+        df.at[i, "engagement"] = eng
+        if d:
+            df.at[i, "date"] = pd.Timestamp(d)
+            df.at[i, "date_known"] = True
+    return df
+
+
 def _request(url: str, client_id: str, client_secret: str) -> dict:
     req = urllib.request.Request(
         url,
@@ -199,5 +273,6 @@ def fetch_naver_mentions(
     df = df[blob.str.contains(rel)]
 
     df = df.drop_duplicates(subset=["url"]).sort_values("date").reset_index(drop=True)
-    df = _attach_blog_engagement(df)  # 블로그 공감수 채우기
+    df = _attach_blog_engagement(df)  # 블로그 공감수
+    df = _attach_cafe_meta(df)        # 카페 댓글수 + 작성일
     return df
