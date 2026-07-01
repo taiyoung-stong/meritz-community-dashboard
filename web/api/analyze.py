@@ -75,11 +75,12 @@ def _blog(bid, log):
         pass
     title, date = f"블로그 {bid}", None
     try:
-        html = _get(f"https://blog.naver.com/{bid}/{log}", limit=120000)
-        m = re.search(r'og:title"\s*content="([^"]+)"', html)
+        html = _get(f"https://blog.naver.com/PostView.naver?blogId={bid}&logNo={log}")
+        m = re.search(r'og:title"?\s*content="([^"]+)"', html)
         if m:
             title = _clean(m.group(1))
-        d = re.search(r"(20\d\d)\.\s?(\d{1,2})\.\s?(\d{1,2})", html)
+        d = (re.search(r"se_publishDate[^>]*>\s*(20\d\d)\.\s*(\d{1,2})\.\s*(\d{1,2})", html)
+             or re.search(r"(20\d\d)\.\s?(\d{1,2})\.\s?(\d{1,2})\.", html))
         if d:
             date = f"{d.group(1)}-{int(d.group(2)):02d}-{int(d.group(3)):02d}"
     except Exception:
