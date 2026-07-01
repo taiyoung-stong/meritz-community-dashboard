@@ -30,6 +30,34 @@ import pandas as pd
 from naver_api import KEYWORD, fetch_naver_mentions
 
 OUT_PATH = os.path.join(os.path.dirname(__file__), "web", "data.json")
+SENT_CACHE_PATH = os.path.join(os.path.dirname(__file__), "web", "sentiment_cache.json")
+
+
+def _apply_llm_sentiment(df: pd.DataFrame) -> pd.DataFrame:
+    """URL 캐시를 활용해 새 글만 LLM으로 감성 분류하고 df.sentiment를 갱신."""
+    from sentiment_llm import classify
+
+    cache: dict[str, str] = {}
+    if os.path.exists(SENT_CACHE_PATH):
+        with open(SENT_CACHE_PATH, encoding="utf-8") as f:
+            cache = json.load(f)
+
+    todo = df[~df["url"].isin(cache.keys())]
+    if not todo.empty:
+        texts = (todo["title"].fillna("") + " " + todo["snippet"].fillna("")).tolist()
+        labels = classify(texts)
+        for url, lab in zip(todo["url"].tolist(), labels):
+            cache[url] = lab
+        print(f"[sentiment_llm] 신규 {len(todo)}건 분류 (캐시 총 {len(cache)})")
+    else:
+        print("[sentiment_llm] 신규 없음 (전부 캐시)")
+
+    df["sentiment"] = df["url"].map(cache).fillna(df["sentiment"])
+    # 캐시에서 현재 URL만 유지(무한 증식 방지)
+    cache = {u: cache[u] for u in df["url"] if u in cache}
+    with open(SENT_CACHE_PATH, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False)
+    return df
 
 
 def main() -> int:
@@ -64,6 +92,14 @@ def main() -> int:
 
     df = pd.concat(frames, ignore_index=True)
     df = df.drop_duplicates(subset=["url", "title"]).reset_index(drop=True)
+
+    # LLM 감성분석 (키 있으면) — URL 캐시로 새 글만 분류
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        try:
+            df = _apply_llm_sentiment(df)
+            parts.append("감성 LLM")
+        except Exception as exc:
+            print(f"[sentiment_llm] 실패, 규칙기반 유지: {exc}", file=sys.stderr)
 
     # 직렬화: 날짜 → 'YYYY-MM-DD' 또는 None
     df = df.sort_values("date", na_position="last")
