@@ -65,6 +65,20 @@
   .neu{background:rgba(168,176,189,.16);color:#c2c8d2}
   .neg{background:rgba(255,92,92,.16);color:#ff8a85}
   .muted{color:var(--muted)}
+  .btn-primary{background:var(--primary);color:#fff;border:none;border-radius:8px;
+    padding:9px 18px;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap}
+  .btn-primary:disabled{opacity:.5;cursor:default}
+  .ppl-item{background:var(--card);border:1px solid var(--border);border-radius:12px;
+    padding:14px 16px;margin-bottom:12px;display:flex;gap:14px;align-items:flex-start}
+  .ppl-item .body{flex:1;min-width:0}
+  .ppl-item .t{font-weight:700;font-size:14px;margin-bottom:6px;word-break:break-all}
+  .ppl-item .meta{font-size:12px;color:var(--muted);margin-bottom:8px}
+  .ppl-metrics{display:flex;gap:10px;flex-wrap:wrap}
+  .metric-chip{background:#0E1117;border:1px solid var(--border);border-radius:8px;
+    padding:5px 10px;font-size:12px}
+  .metric-chip b{font-size:15px;display:block}
+  .ppl-del{background:none;border:1px solid var(--border);color:var(--muted);
+    border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer}
   @media(max-width:880px){.wrap{flex-direction:column}.side{width:auto;height:auto;position:static;border-right:none;border-bottom:1px solid var(--border)}.grid2{grid-template-columns:1fr}}
 </style>
 </head>
@@ -101,6 +115,7 @@
     <div class="tabs">
       <button id="tabPosts" class="on">📰 게시글 탐색</button>
       <button id="tabInsight">📊 인사이트 분석</button>
+      <button id="tabPpl">🎬 PPL 분석</button>
     </div>
 
     <!-- 게시글 탐색 -->
@@ -140,6 +155,21 @@
         <div class="card"><h3>🏷️ 연관 키워드 Top 10</h3><div class="chart" id="cKw"></div></div>
         <div class="card"><h3>🔥 채널별 반응량 (engagement)</h3><div class="chart" id="cEng"></div></div>
       </div>
+    </section>
+
+    <!-- PPL 분석 -->
+    <section id="viewPpl" style="display:none">
+      <div class="card">
+        <h3>🎬 PPL / 인플루언서 게시글 아카이브</h3>
+        <p class="note">블로그·카페·YouTube URL을 추가하면 그 게시글만 따로 분석해 즐겨찾기처럼 모아 봅니다. (이 브라우저에 저장)</p>
+        <div class="controls" style="margin-bottom:0">
+          <input type="text" id="pplUrl" placeholder="https://blog.naver.com/... , https://youtu.be/... , https://cafe.naver.com/...">
+          <button id="pplAdd" class="btn-primary">+ 추가·분석</button>
+        </div>
+        <p class="note muted" id="pplMsg"></p>
+      </div>
+      <div class="kpis" id="pplKpis"></div>
+      <div id="pplList"></div>
     </section>
   </main>
 </div>
@@ -193,6 +223,9 @@ async function init(){
   // 탭
   document.getElementById('tabPosts').onclick=()=>switchTab('posts');
   document.getElementById('tabInsight').onclick=()=>switchTab('insight');
+  document.getElementById('tabPpl').onclick=()=>switchTab('ppl');
+  document.getElementById('pplAdd').onclick=addPpl;
+  document.getElementById('pplUrl').addEventListener('keydown',e=>{if(e.key==='Enter')addPpl();});
   document.getElementById('q').oninput=e=>{state.q=e.target.value;renderPosts();};
   document.getElementById('sort').onchange=e=>{state.sort=e.target.value;renderPosts();};
   // 출처
@@ -205,11 +238,12 @@ async function init(){
 
 function switchTab(t){
   state.tab=t;
-  document.getElementById('tabPosts').classList.toggle('on',t==='posts');
-  document.getElementById('tabInsight').classList.toggle('on',t==='insight');
-  document.getElementById('viewPosts').style.display=t==='posts'?'':'none';
-  document.getElementById('viewInsight').style.display=t==='insight'?'':'none';
-  render();
+  for(const [b,v] of [['tabPosts','viewPosts'],['tabInsight','viewInsight'],['tabPpl','viewPpl']]){
+    const on=(t===b.replace('tab','').toLowerCase());
+    document.getElementById(b).classList.toggle('on',on);
+    document.getElementById(v).style.display=on?'':'none';
+  }
+  if(t==='ppl') renderPpl(); else render();
 }
 
 function filtered(){
@@ -343,6 +377,63 @@ function drawEng(rows){
   c.setOption({backgroundColor:'',tooltip:{trigger:'axis'},grid:{left:90,right:24,top:10,bottom:24},
     xAxis:{type:'value',...axisStyle},yAxis:{type:'category',data:top.map(x=>x[0]),...axisStyle},
     series:[{type:'bar',itemStyle:{color:'#F4A23F'},data:top.map(x=>x[1])}]});
+}
+
+// ===== PPL 아카이브 (localStorage + /api/analyze) =====
+const PPL_KEY='ppl_items_v1';
+const loadPpl=()=>{try{return JSON.parse(localStorage.getItem(PPL_KEY)||'[]');}catch(e){return[];}};
+const savePpl=a=>localStorage.setItem(PPL_KEY,JSON.stringify(a));
+
+async function addPpl(){
+  const inp=document.getElementById('pplUrl'), btn=document.getElementById('pplAdd'), msg=document.getElementById('pplMsg');
+  const url=inp.value.trim();
+  if(!url){return;}
+  const items=loadPpl();
+  if(items.some(x=>x.url===url)){msg.textContent='이미 추가된 URL입니다.';return;}
+  btn.disabled=true; msg.textContent='분석 중…';
+  try{
+    const r=await fetch('/api/analyze?url='+encodeURIComponent(url));
+    const d=await r.json();
+    if(!r.ok||d.error){throw new Error(d.error||'분석 실패');}
+    d.added_at=new Date().toISOString().slice(0,10);
+    items.unshift(d); savePpl(items);
+    inp.value=''; msg.textContent='추가됨 ✓'; renderPpl();
+  }catch(e){msg.textContent='오류: '+e.message;}
+  finally{btn.disabled=false;}
+}
+
+function delPpl(url){ savePpl(loadPpl().filter(x=>x.url!==url)); renderPpl(); }
+
+function renderPpl(){
+  const items=loadPpl();
+  const wrap=document.getElementById('pplList');
+  const kpis=document.getElementById('pplKpis');
+  if(!items.length){
+    kpis.innerHTML=''; wrap.innerHTML='<p class="note muted">아직 추가한 게시글이 없습니다. 위에 URL을 붙여넣고 [+ 추가·분석]을 눌러보세요.</p>';
+    return;
+  }
+  const totEng=items.reduce((s,m)=>s+(m.engagement||0),0);
+  const pos=items.filter(m=>m.sentiment==='긍정').length;
+  const byP={};items.forEach(m=>byP[m.platform]=(byP[m.platform]||0)+1);
+  kpis.innerHTML=kpi('아카이브 게시글',fmt(items.length)+'건')
+    +kpi('총 반응수',fmt(totEng))
+    +kpi('긍정 비율',(pos/items.length*100).toFixed(0)+'%')
+    +kpi('플랫폼',Object.entries(byP).map(([k,v])=>`${k.replace('네이버 ','')} ${v}`).join(' · ')||'—');
+  wrap.innerHTML=items.map(m=>`
+    <div class="ppl-item">
+      <div class="body">
+        <div class="t">${esc(m.title||'(제목 없음)')}</div>
+        <div class="meta">
+          <span class="pill ${SENT_CLASS[m.sentiment]||'neu'}">${m.sentiment||'—'}</span>
+          &nbsp;${m.platform} · ${m.author||''} · 작성일 ${m.date||'미확인'} · 추가 ${m.added_at||''}
+          &nbsp;·&nbsp;<a href="${m.url}" target="_blank" rel="noopener" style="color:#FF8A85">원문</a>
+        </div>
+        <div class="ppl-metrics">
+          ${Object.entries(m.metrics||{}).map(([k,v])=>`<span class="metric-chip">${k}<b>${fmt(v)}</b></span>`).join('')}
+        </div>
+      </div>
+      <button class="ppl-del" onclick="delPpl('${m.url.replace(/'/g,"\\'")}')">삭제</button>
+    </div>`).join('');
 }
 
 init();
