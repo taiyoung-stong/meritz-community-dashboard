@@ -34,8 +34,14 @@ SENT_CACHE_PATH = os.path.join(os.path.dirname(__file__), "web", "sentiment_cach
 
 
 def _apply_llm_sentiment(df: pd.DataFrame) -> pd.DataFrame:
-    """URL 캐시를 활용해 새 글만 LLM으로 감성 분류하고 df.sentiment를 갱신."""
-    from sentiment_llm import classify
+    """URL 캐시를 활용해 새 글만 LLM으로 감성 분류하고 df.sentiment를 갱신.
+
+    GEMINI_API_KEY(무료) 우선, 없으면 ANTHROPIC_API_KEY 사용.
+    """
+    if os.environ.get("GEMINI_API_KEY"):
+        from sentiment_gemini import classify
+    else:
+        from sentiment_llm import classify
 
     cache: dict[str, str] = {}
     if os.path.exists(SENT_CACHE_PATH):
@@ -94,7 +100,7 @@ def main() -> int:
     df = df.drop_duplicates(subset=["url", "title"]).reset_index(drop=True)
 
     # LLM 감성분석 (키 있으면) — URL 캐시로 새 글만 분류
-    if os.environ.get("ANTHROPIC_API_KEY"):
+    if os.environ.get("GEMINI_API_KEY") or os.environ.get("ANTHROPIC_API_KEY"):
         try:
             df = _apply_llm_sentiment(df)
             parts.append("감성 LLM")

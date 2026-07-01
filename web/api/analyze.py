@@ -36,7 +36,34 @@ def _clean(t):
     return t.strip()
 
 
+def _sentiment_gemini(text, key):
+    body = {
+        "systemInstruction": {"parts": [{"text":
+            "글이 '메리츠 파트너스'에 보이는 태도를 긍정/중립/부정으로 분류. "
+            "문맥·반어·부정문 고려. 라벨만 반환."}]},
+        "contents": [{"parts": [{"text": text[:500]}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {"type": "STRING", "enum": ["긍정", "중립", "부정"]},
+            "temperature": 0,
+        },
+    }
+    url = ("https://generativelanguage.googleapis.com/v1beta/models/"
+           f"gemini-2.5-flash:generateContent?key={key}")
+    req = urllib.request.Request(url, data=json.dumps(body).encode(),
+                                 headers={"Content-Type": "application/json"})
+    r = json.loads(urllib.request.urlopen(req, timeout=20).read().decode())
+    lab = json.loads(r["candidates"][0]["content"]["parts"][0]["text"])
+    return lab if lab in ("긍정", "중립", "부정") else "중립"
+
+
 def _sentiment(text):
+    key = os.environ.get("GEMINI_API_KEY")
+    if key:
+        try:
+            return _sentiment_gemini(text, key)
+        except Exception:
+            pass
     p = sum(text.count(w) for w in POS)
     n = sum(text.count(w) for w in NEG)
     return "부정" if n > p else "긍정" if p > n else "중립"
