@@ -126,15 +126,30 @@ def analyze(url):
     url = (url or "").strip()
     if not url:
         raise ValueError("URL을 입력하세요")
+
+    # YouTube
     m = re.search(r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)([\w-]{11})", url)
     if m:
         return {**_youtube(m.group(1)), "url": url}
-    m = re.search(r"blog\.naver\.com/([^/?]+)/(\d+)", url)
+
+    # 네이버 블로그 — 경로형(/id/logno) 또는 쿼리형(?logNo=), m.blog 포함
+    m = re.search(r"blog\.naver\.com/([^/?#]+)/(\d+)", url)
     if m:
         return {**_blog(m.group(1), m.group(2)), "url": url}
-    m = re.search(r"cafe\.naver\.com/([^/?]+)/(\d+)", url)
+    mid = re.search(r"blog\.naver\.com/([^/?#]+)", url)
+    mlog = re.search(r"[?&]logNo=(\d+)", url, re.I)
+    if mid and mlog:
+        return {**_blog(mid.group(1), mlog.group(1)), "url": url}
+
+    # 네이버 카페 — 경로형 또는 쿼리형(?articleid=)
+    m = re.search(r"cafe\.naver\.com/([^/?#]+)/(\d+)", url)
     if m:
         return {**_cafe(m.group(1), m.group(2)), "url": url}
+    mcid = re.search(r"cafe\.naver\.com/([^/?#]+)", url)
+    mart = re.search(r"[?&]articleid=(\d+)", url, re.I)
+    if mcid and mart:
+        return {**_cafe(mcid.group(1), mart.group(1)), "url": url}
+
     raise ValueError("지원하지 않는 URL (네이버 블로그·카페 또는 YouTube만 가능)")
 
 
