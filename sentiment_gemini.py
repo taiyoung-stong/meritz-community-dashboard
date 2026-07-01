@@ -40,7 +40,7 @@ def _call(key: str, texts: list[str]) -> list[str]:
     }
     url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
            f"{MODEL}:generateContent?key={key}")
-    for attempt in range(5):
+    for attempt in range(3):
         try:
             req = urllib.request.Request(
                 url, data=json.dumps(body).encode(),
@@ -52,11 +52,11 @@ def _call(key: str, texts: list[str]) -> list[str]:
                 labels = (labels + ["중립"] * len(texts))[: len(texts)]
             return [l if l in LABELS else "중립" for l in labels]
         except urllib.error.HTTPError as e:
-            if e.code == 429 and attempt < 4:
-                time.sleep(8 * (attempt + 1))  # 속도제한 → 백오프
+            if e.code == 429 and attempt < 2:
+                time.sleep(5 * (attempt + 1))  # 속도제한 → 짧은 백오프
                 continue
-            raise
-    return ["중립"] * len(texts)
+            raise  # 소진 시 상위에서 None 처리(다음 실행 재시도)
+    raise RuntimeError("gemini 429 재시도 소진")
 
 
 def classify(texts: list[str]) -> list:
