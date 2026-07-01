@@ -73,6 +73,13 @@
   <aside class="side">
     <h2>🔎 필터</h2>
     <div class="label">기간</div>
+    <div class="seg" id="rangeSeg" style="margin-bottom:8px">
+      <button data-r="all" class="on">전체</button>
+      <button data-r="30">1개월</button>
+      <button data-r="90">3개월</button>
+      <button data-r="180">6개월</button>
+      <button data-r="365">1년</button>
+    </div>
     <div class="date-row">
       <input type="date" id="dFrom"><input type="date" id="dTo">
     </div>
@@ -142,7 +149,7 @@ const PALETTE=['#7FD1B9','#FF9F7F','#9AA7FF','#F4A23F','#B6E36B','#F2D14E','#D9A
 const SENT_COLOR={'긍정':'#3BC97A','중립':'#A8B0BD','부정':'#FF5C5C'};
 const SENT_CLASS={'긍정':'pos','중립':'neu','부정':'neg'};
 const fmt=n=>n.toLocaleString('ko-KR');
-let DATA=null, charts={};
+let DATA=null, charts={}, EVENTS=[], MAXDATE=null;
 
 const state={channels:new Set(),sents:new Set(['긍정','중립','부정']),from:null,to:null,
   tab:'posts',q:'',sort:'recent'};
@@ -167,11 +174,22 @@ async function init(){
     b.classList.contains('on')?state.sents.add(b.dataset.s):state.sents.delete(b.dataset.s);render();});
   // 기간
   const dated=DATA.mentions.filter(m=>m.date).map(m=>m.date).sort();
-  state.from=dated[0]; state.to=dated[dated.length-1];
+  state.from=dated[0]; state.to=dated[dated.length-1]; MAXDATE=state.to;
   const df=document.getElementById('dFrom'),dt=document.getElementById('dTo');
   df.value=state.from; dt.value=state.to;
-  df.onchange=()=>{state.from=df.value;render();};
-  dt.onchange=()=>{state.to=dt.value;render();};
+  const clearPreset=()=>document.querySelectorAll('#rangeSeg button').forEach(b=>b.classList.remove('on'));
+  df.onchange=()=>{state.from=df.value;clearPreset();render();};
+  dt.onchange=()=>{state.to=dt.value;clearPreset();render();};
+  // 기간 프리셋
+  document.querySelectorAll('#rangeSeg button').forEach(b=>b.onclick=()=>{
+    clearPreset(); b.classList.add('on');
+    const r=b.dataset.r;
+    if(r==='all'){state.from=dated[0];}
+    else{const d=new Date(MAXDATE+'T00:00:00');d.setDate(d.getDate()-(+r));state.from=d.toISOString().slice(0,10);}
+    state.to=MAXDATE; df.value=state.from; dt.value=state.to; render();
+  });
+  // 이벤트 마커(오윤아 PPL·인플루언서 집행 등) — events.json (수집기와 무관, 수동 편집)
+  try{ EVENTS=await (await fetch('events.json?_='+Date.now())).json(); }catch(e){ EVENTS=[]; }
   // 탭
   document.getElementById('tabPosts').onclick=()=>switchTab('posts');
   document.getElementById('tabInsight').onclick=()=>switchTab('insight');
@@ -271,10 +289,17 @@ function drawTrend(rows){
   const chans=[...new Set(rows.map(m=>m.channel))].sort();
   const series=chans.map((ch,i)=>({name:ch,type:'line',stack:'t',areaStyle:{opacity:.55},
     showSymbol:false,lineStyle:{width:.5},itemStyle:{color:PALETTE[i%PALETTE.length]},
-    data:dates.map(d=>rows.filter(m=>m.date===d&&m.channel===ch).length)}));
+    data:dates.map(d=>[d, rows.filter(m=>m.date===d&&m.channel===ch).length])}));
+  // 이벤트 마커 (집행 시점) — 기간 내 이벤트만
+  const evs=EVENTS.filter(e=>e.date&&(!state.from||e.date>=state.from)&&(!state.to||e.date<=state.to));
+  if(series.length&&evs.length){
+    series[0].markLine={symbol:['none','none'],lineStyle:{color:'#FFD166',type:'dashed',width:1.5},
+      label:{color:'#FFD166',fontWeight:700,formatter:p=>p.name,position:'insideEndTop'},
+      data:evs.map(e=>({xAxis:e.date,name:e.label}))};
+  }
   c.setOption({backgroundColor:'',tooltip:{trigger:'axis'},legend:{textStyle:{color:'#8B93A7'},bottom:0,type:'scroll'},
     grid:{left:42,right:16,top:16,bottom:50},
-    xAxis:{type:'category',data:dates,...axisStyle},yAxis:{type:'value',...axisStyle},series});
+    xAxis:{type:'time',...axisStyle},yAxis:{type:'value',...axisStyle},series});
 }
 function drawChannel(rows){
   const c=charts.cChannel||baseChart(document.getElementById('cChannel'));
